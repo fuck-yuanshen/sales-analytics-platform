@@ -9,4 +9,5 @@ frontend/dist/
 *.db
 *.sqlite*
 .env
+*.tar.gz
 .DS_Store
