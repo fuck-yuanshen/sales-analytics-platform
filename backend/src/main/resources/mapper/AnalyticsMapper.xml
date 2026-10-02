@@ -1,0 +1,197 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.salesanalysis.mapper.AnalyticsMapper">
+
+    <sql id="baseFilter">
+        o.placed_at <![CDATA[>=]]> #{startTime}
+        AND o.placed_at <![CDATA[<]]> #{endTime}
+        <if test="paymentStatuses != null and paymentStatuses.size() > 0">
+            AND o.payment_status IN
+            <foreach collection="paymentStatuses" item="status" open="(" separator="," close=")">
+                #{status}
+            </foreach>
+        </if>
+        <if test="orderTypes != null and orderTypes.size() > 0">
+            AND o.order_type IN
+            <foreach collection="orderTypes" item="orderType" open="(" separator="," close=")">
+                #{orderType}
+            </foreach>
+        </if>
+        <if test="provinces != null and provinces.size() > 0">
+            AND u.province IN
+            <foreach collection="provinces" item="province" open="(" separator="," close=")">
+                #{province}
+            </foreach>
+        </if>
+        <if test="cities != null and cities.size() > 0">
+            AND u.city IN
+            <foreach collection="cities" item="city" open="(" separator="," close=")">
+                #{city}
+            </foreach>
+        </if>
+        <if test="districts != null and districts.size() > 0">
+            AND u.district IN
+            <foreach collection="districts" item="district" open="(" separator="," close=")">
+                #{district}
+            </foreach>
+        </if>
+        <if test="userTags != null and userTags.size() > 0">
+            AND u.user_tag IN
+            <foreach collection="userTags" item="tag" open="(" separator="," close=")">
+                #{tag}
+            </foreach>
+        </if>
+        <if test="spendingTiers != null and spendingTiers.size() > 0">
+            AND u.spending_tier IN
+            <foreach collection="spendingTiers" item="tier" open="(" separator="," close=")">
+                #{tier}
+            </foreach>
+        </if>
+    </sql>
+
+    <select id="sumSales" resultType="java.math.BigDecimal">
+        SELECT COALESCE(SUM(o.total_amount), 0)
+        FROM orders o
+        JOIN users u ON o.user_id = u.id
+        WHERE <include refid="baseFilter"/>
+    </select>
+
+    <select id="sumQuantity" resultType="java.lang.Long">
+        SELECT COALESCE(SUM(o.total_quantity), 0)
+        FROM orders o
+        JOIN users u ON o.user_id = u.id
+        WHERE <include refid="baseFilter"/>
+    </select>
+
+    <select id="countEffectiveOrders" resultType="java.lang.Long">
+        SELECT COUNT(1)
+        FROM orders o
+        JOIN users u ON o.user_id = u.id
+        WHERE <include refid="baseFilter"/> AND o.payment_status = 'PAID'
+    </select>
+
+    <select id="countPlacedOrders" resultType="java.lang.Long">
+        SELECT COUNT(1)
+        FROM orders o
+        JOIN users u ON o.user_id = u.id
+        WHERE <include refid="baseFilter"/>
+    </select>
+
+    <select id="countPaidOrders" resultType="java.lang.Long">
+        SELECT COUNT(1)
+        FROM orders o
+        JOIN users u ON o.user_id = u.id
+        WHERE <include refid="baseFilter"/> AND o.payment_status = 'PAID'
+    </select>
+
+    <select id="countPaidUsers" resultType="java.lang.Long">
+        SELECT COUNT(DISTINCT o.user_id)
+        FROM orders o
+        JOIN users u ON o.user_id = u.id
+        WHERE <include refid="baseFilter"/> AND o.payment_status = 'PAID'
+    </select>
+
+    <select id="countRepurchaseUsers" resultType="java.lang.Long">
+        SELECT COUNT(1)
+        FROM (
+            SELECT o.user_id
+            FROM orders o
+            JOIN users u ON o.user_id = u.id
+            WHERE <include refid="baseFilter"/> AND o.payment_status = 'PAID'
+            GROUP BY o.user_id
+            HAVING COUNT(1) > 1
+        ) t
+    </select>
+
+    <select id="queryTrend" resultType="com.example.salesanalysis.dto.TrendPointRow">
+        SELECT
+        <choose>
+            <when test="granularity == 'DAY'">DATE_FORMAT(o.placed_at, '%Y-%m-%d')</when>
+            <when test="granularity == 'WEEK'">DATE_FORMAT(o.placed_at, '%x-W%v')</when>
+            <when test="granularity == 'MONTH'">DATE_FORMAT(o.placed_at, '%Y-%m')</when>
+            <when test="granularity == 'QUARTER'">CONCAT(YEAR(o.placed_at), '-Q', QUARTER(o.placed_at))</when>
+            <otherwise>DATE_FORMAT(o.placed_at, '%Y')</otherwise>
+        </choose>
+        AS period,
+        COALESCE(SUM(o.total_amount), 0) AS salesAmount,
+        COALESCE(SUM(o.total_quantity), 0) AS salesQuantity
+        FROM orders o
+        JOIN users u ON o.user_id = u.id
+        WHERE <include refid="baseFilter"/>
+        GROUP BY period
+        ORDER BY period
+    </select>
+
+    <select id="queryTopProducts" resultType="com.example.salesanalysis.dto.TopProductRow">
+        SELECT p.product_name AS productName,
+               COALESCE(SUM(oi.quantity), 0) AS quantity,
+               COALESCE(SUM(oi.amount), 0) AS salesAmount
+        FROM order_items oi
+        JOIN orders o ON oi.order_id = o.id
+        JOIN products p ON oi.product_id = p.id
+        JOIN users u ON o.user_id = u.id
+        WHERE <include refid="baseFilter"/> AND o.payment_status = 'PAID'
+        GROUP BY p.product_name
+        ORDER BY quantity DESC
+        LIMIT 10
+    </select>
+
+    <select id="queryUserGenderDistribution" resultType="com.example.salesanalysis.dto.LabelCountRow">
+        SELECT COALESCE(u.gender, 'UNKNOWN') AS label,
+               COUNT(1) AS value
+        FROM orders o
+        JOIN users u ON o.user_id = u.id
+        WHERE <include refid="baseFilter"/> AND o.payment_status = 'PAID'
+        GROUP BY u.gender
+    </select>
+
+    <select id="queryUserTagDistribution" resultType="com.example.salesanalysis.dto.LabelCountRow">
+        SELECT COALESCE(u.user_tag, 'UNKNOWN') AS label,
+               COUNT(1) AS value
+        FROM orders o
+        JOIN users u ON o.user_id = u.id
+        WHERE <include refid="baseFilter"/> AND o.payment_status = 'PAID'
+        GROUP BY u.user_tag
+    </select>
+
+    <select id="queryGeoDistribution" resultType="com.example.salesanalysis.dto.RegionSalesRow">
+        SELECT
+        <choose>
+            <when test="level == 'CITY'">COALESCE(u.city, 'UNKNOWN')</when>
+            <when test="level == 'DISTRICT'">COALESCE(u.district, 'UNKNOWN')</when>
+            <otherwise>COALESCE(u.province, 'UNKNOWN')</otherwise>
+        </choose>
+        AS regionName,
+        COALESCE(SUM(o.total_amount), 0) AS salesAmount
+        FROM orders o
+        JOIN users u ON o.user_id = u.id
+        WHERE <include refid="baseFilter"/> AND o.payment_status = 'PAID'
+        GROUP BY regionName
+        ORDER BY salesAmount DESC
+    </select>
+
+    <select id="queryDrillDown" resultType="com.example.salesanalysis.dto.RegionSalesRow">
+        SELECT
+        <choose>
+            <when test="level == 'CITY'">COALESCE(u.city, 'UNKNOWN')</when>
+            <when test="level == 'DISTRICT'">COALESCE(u.district, 'UNKNOWN')</when>
+            <otherwise>COALESCE(u.province, 'UNKNOWN')</otherwise>
+        </choose>
+        AS regionName,
+        COALESCE(SUM(o.total_amount), 0) AS salesAmount
+        FROM orders o
+        JOIN users u ON o.user_id = u.id
+        WHERE <include refid="baseFilter"/> AND o.payment_status = 'PAID'
+        <if test="parentRegion != null and parentRegion != ''">
+            <choose>
+                <when test="level == 'CITY'">AND u.province = #{parentRegion}</when>
+                <when test="level == 'DISTRICT'">AND u.city = #{parentRegion}</when>
+            </choose>
+        </if>
+        GROUP BY regionName
+        ORDER BY salesAmount DESC
+    </select>
+
+</mapper>
