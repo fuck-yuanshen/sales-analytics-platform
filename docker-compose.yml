@@ -4,10 +4,10 @@ services:
     container_name: sales-analysis-mysql
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-admin}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?请先设置 MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: ${MYSQL_DATABASE:-sales_analysis}
       MYSQL_USER: ${MYSQL_USER:-sales_user}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-sales_password}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?请先设置 MYSQL_PASSWORD}
       TZ: Asia/Shanghai
     ports:
       - "${MYSQL_HOST_PORT:-3306}:3306"
@@ -25,7 +25,7 @@ services:
     environment:
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-sales_analysis}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai&characterEncoding=utf8
       SPRING_DATASOURCE_USERNAME: ${MYSQL_USER:-sales_user}
-      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD:-sales_password}
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD:?请先设置 MYSQL_PASSWORD}
     ports:
       - "${BACKEND_HOST_PORT:-8080}:8080"
 
